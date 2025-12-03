@@ -12,6 +12,36 @@ import io
 import base64
 from datetime import datetime
 
+# ✅ **2. Better App Title + Theme (copy into your app.py)**
+# Custom Theme Styling
+st.markdown("""
+<style>
+.main-title {
+    font-size: 42px;
+    font-weight: 900;
+    color: #00E5FF;
+}
+.subtitle {
+    font-size: 18px;
+    color: #B0BEC5;
+    margin-bottom: 20px;
+}
+.section-header {
+    font-size: 24px;
+    font-weight: 700;
+    color: #80DEEA;
+    margin-top: 20px;
+}
+.block {
+    background-color: #0A192F;
+    padding: 18px;
+    border-radius: 10px;
+    border: 1px solid #1E3A8A;
+    margin-bottom: 16px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.set_page_config(page_title="Social Media vs Productivity (Demo)", layout="wide",
                    initial_sidebar_state="expanded")
 
