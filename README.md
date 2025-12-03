@@ -33,10 +33,6 @@ Predict:
 - Estimated impact on GPA  
 - Before vs After distribution comparison  
 
-### **4. Live Survey Entry**
-Add data points DURING the demo — charts update instantly.
-
----
 
 ## 📦 Installation (Local)
 ```bash
