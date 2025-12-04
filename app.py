@@ -1,277 +1,218 @@
-# app.py - Upgraded Streamlit app for "Impact of Social Media on Student Productivity"
-# Features:
-# - Polished UI and theme
-# - Sidebar filters and model selection
-# - Tabs: Overview, Analysis, Simulator, Add Entry
-# - Robust plotting with sklearn regression or RandomForest
-# - Bootstrap CI option
-# - Live row entry (in-session)
-# - Download dataset and chart (PNG with kaleido fallback to HTML)
-# - Defensive code to avoid crashes on servers without image engines
-# - Clean header and project metadata
-
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.utils import resample
-from sklearn.metrics import r2_score
+import joblib
 import plotly.express as px
-import plotly.graph_objects as go
-import io
-from datetime import datetime
+import matplotlib.pyplot as plt
+from utils import preprocess_for_model, extract_keywords_tfidf, basic_sentiment_score
 
-st.set_page_config(page_title="Social Media & Productivity — Interactive Demo",
-                   layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Student Productivity Analysis Dashboard", layout="wide")
 
-# -------------------------
-# Styling / Header
-# -------------------------
+st.title("📊 Impact of Social Media Usage on Student Productivity")
 st.markdown("""
-<style>
-body {background-color: #071427;}
-.header-title {font-size:36px; font-weight:800; color:#00E5FF; margin-bottom:0;}
-.header-sub {font-size:14px; color:#B0BEC5; margin-top:2px; margin-bottom:12px;}
-.card {background-color:#071427; padding:12px; border-radius:10px; border:1px solid #0f1724;}
-.sidebar .stSlider > div > div {color:#fff;}
-</style>
-""", unsafe_allow_html=True)
+This dashboard analyzes real student survey data and uses Machine Learning to explore  
+how **screen time**, **study hours**, **sleep**, and **social media habits** affect **productivity**.
+""")
 
-col1, col2 = st.columns([8,2])
-with col1:
-    st.markdown("<div class='header-title'>📱 Impact of Social Media on Student Productivity</div>", unsafe_allow_html=True)
-    st.markdown("<div class='header-sub'>Interactive dashboard — analyze, simulate, and demonstrate how screen-time affects study-hours and performance.</div>", unsafe_allow_html=True)
-with col2:
-    st.write("")  # reserved for image or logo
-
-st.markdown("---")
-
-# -------------------------
-# Utilities
-# -------------------------
-@st.cache_data
-def load_sample(path="sample_data.csv"):
-    try:
-        return pd.read_csv(path)
-    except Exception:
-        # fallback small sample
-        return pd.DataFrame({
-            'id':[1,2,3],
-            'age':[17,18,16],
-            'year':['11th','12th','11th'],
-            'screen_time_hours':[3.2,4.5,1.5],
-            'purpose':['Entertainment','Social','Study'],
-            'study_hours_per_day':[3.5,2.0,5.0],
-            'gpa':[6.5,5.2,8.0],
-            'sleep_hours':[6.8,6.0,8.0],
-            'uses_study_apps':['no','no','yes'],
-            'uses_focus_mode':['no','yes','no'],
-            'expected_gain_minutes_if_reduce_1h':[15,8,25]
-        })
-
-def download_bytes(obj_bytes, filename, mime):
-    st.download_button(label=f"Download {filename}", data=obj_bytes, file_name=filename, mime=mime)
-
-def add_row(df, row):
-    return pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-
-def bootstrap_slope_ci(x, y, n_boot=1000, alpha=0.05):
-    slopes = []
-    for i in range(n_boot):
-        xi, yi = resample(x, y)
-        m = LinearRegression().fit(xi.reshape(-1,1), yi)
-        slopes.append(m.coef_[0])
-    lower = np.percentile(slopes, 100*alpha/2)
-    upper = np.percentile(slopes, 100*(1-alpha/2))
-    return lower, upper, np.mean(slopes)
-
-# -------------------------
-# Load data
-# -------------------------
-df = load_sample("sample_data.csv")
-
-# Sidebar controls
+# SIDEBAR
 with st.sidebar:
-    st.header("Controls & Filters")
-    year_opts = ["All"] + sorted(df['year'].unique().tolist())
-    selected_year = st.selectbox("Year", year_opts, index=0)
-    purpose_opts = ["All"] + sorted(df['purpose'].unique().tolist())
-    selected_purpose = st.selectbox("Purpose", purpose_opts, index=0)
-    focus_mode = st.selectbox("Uses focus mode", ["All","yes","no"], index=0)
-    show_table = st.checkbox("Show data table", value=False)
+    st.header("Upload & Setup")
+    uploaded = st.file_uploader("Upload Google Forms CSV", type=["csv"])
+
+    model_file = st.file_uploader("Upload trained model (model.joblib)", type=["joblib"])
+
+    train_now = st.button("Train Model From CSV")
+
+    target_col = "productivity_rating"
+
     st.markdown("---")
-    st.write("Model & analysis options")
-    model_choice = st.selectbox("Model", ["Linear Regression","Random Forest"], index=0)
-    run_boot = st.checkbox("Bootstrap slope CI (slower)", value=False)
-    st.markdown("---")
-    st.write("Project info")
-    st.text_input("Group / Author", value="Your Name Here", key="author")
-    st.text_input("Institution", value="Your School", key="institution")
-    st.markdown("Tip: Use the 'Add Entry' tab to add demo rows live.")
+    st.caption("Dashboard developed for academic analysis — no external APIs used.")
 
-# Apply filters
-df_display = df.copy()
-if selected_year != "All":
-    df_display = df_display[df_display['year'] == selected_year]
-if selected_purpose != "All":
-    df_display = df_display[df_display['purpose'] == selected_purpose]
-if focus_mode != "All":
-    df_display = df_display[df_display['uses_focus_mode'] == focus_mode]
+# ----------------------------
+# LOAD CSV
+# ----------------------------
+df = None
+if uploaded is not None:
+    df = pd.read_csv(uploaded)
 
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Analysis", "Simulator", "Add Entry"])
+    # Strip extra spaces in column names
+    df.columns = df.columns.str.strip()
 
-# ---------- Overview ----------
-with tab1:
-    st.subheader("Overview & key metrics")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Samples (N)", len(df_display))
-    c2.metric("Median screen time (hrs)", f"{df_display['screen_time_hours'].median():.2f}")
-    c3.metric("Median study hrs/day", f"{df_display['study_hours_per_day'].median():.2f}")
-    c4.metric("Median GPA", f"{df_display['gpa'].median():.2f}")
+    # MAP YOUR REAL CSV COLUMNS → CLEAN NAMES
+    col_map = {
+        "4. Average daily social media screen time (in hours)": "screen_time_hours",
+        "5. Average daily study hours (in hours)": "study_hours",
+        "6. Average daily sleep hours": "sleep_hours",
+        "10. Productivity Rating (1–10)": "productivity_rating",
+        "8. Purpose of social media usage": "open_response",
+        "7. Top social media apps you use": "social_apps",
+        "3. Gender": "gender",
+        "2. Age": "age",
+        "1. NAME": "name",
+    }
+    df = df.rename(columns=col_map)
 
-    st.markdown("### Distributions")
-    g1, g2 = st.columns([2,1])
-    with g1:
-        fig_hist = px.histogram(df_display, x='screen_time_hours', nbins=8, title="Screen time (hrs/day) distribution")
-        st.plotly_chart(fig_hist, use_container_width=True)
-    with g2:
-        fig_pie = px.pie(df_display, names='purpose', title="Purpose of social media")
-        st.plotly_chart(fig_pie, use_container_width=True)
+    st.success("CSV Loaded Successfully ✓ Columns mapped!")
 
-    st.markdown("### Dataset")
-    if show_table:
-        st.dataframe(df_display.reset_index(drop=True), use_container_width=True)
-    csv_bytes = df_display.to_csv(index=False).encode('utf-8')
-    download_bytes(csv_bytes, f"dataset_filtered_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", "text/csv")
+if df is None:
+    st.info("Please upload your real CSV file to continue.")
+    st.stop()
 
-# ---------- Analysis ----------
-with tab2:
-    st.subheader("Analysis: Screen time vs Study hours")
-    if len(df_display) < 4:
-        st.warning("Not enough data points to run reliable models. Add more rows or remove filters.")
-    else:
-        x = df_display['screen_time_hours'].to_numpy()
-        y = df_display['study_hours_per_day'].to_numpy()
+# ---------------------------------------------
+# PREVIEW
+# ---------------------------------------------
+st.subheader("📄 Data Preview")
+st.dataframe(df.head())
 
-        if model_choice == "Linear Regression":
-            model = LinearRegression().fit(x.reshape(-1,1), y)
-            slope = model.coef_[0]
-            intercept = model.intercept_
-            preds = model.predict(x.reshape(-1,1))
-        else:
-            rf = RandomForestRegressor(n_estimators=200, random_state=42)
-            rf.fit(x.reshape(-1,1), y)
-            xr = np.linspace(x.min(), x.max(), 100)
-            slope = (rf.predict(xr.reshape(-1,1))[-1] - rf.predict(xr.reshape(-1,1))[0]) / (xr[-1]-xr[0])
-            intercept = None
-            preds = rf.predict(x.reshape(-1,1))
+# ---------------------------------------------
+# SUMMARY BOXES
+# ---------------------------------------------
+st.subheader("📌 Key Summary Statistics")
 
-        r2 = r2_score(y, preds)
+col1, col2, col3, col4 = st.columns(4)
 
-        # Plot
-        fig = px.scatter(df_display, x='screen_time_hours', y='study_hours_per_day', color='purpose',
-                         hover_data=['gpa','sleep_hours'], title="Screen time vs Study hours")
-        xr_line = np.linspace(x.min(), x.max(), 100)
-        if model_choice == "Linear Regression":
-            fig.add_trace(go.Scatter(x=xr_line, y=intercept + slope*xr_line, mode='lines', line=dict(color='black', width=3),
-                                     name='Linear fit'))
-        else:
-            fig.add_trace(go.Scatter(x=xr_line, y=rf.predict(xr_line.reshape(-1,1)), mode='lines', line=dict(color='black', width=3),
-                                     name='RF fit'))
+col1.metric("Avg Screen Time", f"{df['screen_time_hours'].mean():.2f} hrs")
+col2.metric("Avg Study Time", f"{df['study_hours'].mean():.2f} hrs")
+col3.metric("Avg Sleep", f"{df['sleep_hours'].mean():.2f} hrs")
+col4.metric("Avg Productivity", f"{df['productivity_rating'].mean():.2f} / 10")
 
-        st.plotly_chart(fig, use_container_width=True)
+# ---------------------------------------------
+# EDA VISUALIZATIONS
+# ---------------------------------------------
+st.header("📊 Exploratory Data Analysis")
 
-        st.markdown("#### Key stats")
-        st.write(f"Pearson correlation: **{np.corrcoef(x,y)[0,1]:.3f}**")
-        st.write(f"Model slope (hours study per hour screen): **{slope:.3f}**")
-        st.write(f"Model R²: **{r2:.3f}**")
+# Scatter: screen time vs productivity
+fig1 = px.scatter(df, x="screen_time_hours", y="productivity_rating",
+                  trendline="ols",
+                  title="Screen Time vs Productivity")
+st.plotly_chart(fig1, use_container_width=True)
 
-        if run_boot:
-            lower, upper, mean_slope = bootstrap_slope_ci(x, y, n_boot=1000, alpha=0.05)
-            st.write(f"Bootstrap 95% CI for slope: [{lower:.3f}, {upper:.3f}]  (mean slope ≈ {mean_slope:.3f})")
+# Scatter: study hours vs productivity
+fig2 = px.scatter(df, x="study_hours", y="productivity_rating",
+                  trendline="ols",
+                  title="Study Hours vs Productivity")
+st.plotly_chart(fig2, use_container_width=True)
 
-        # Download chart — robust handling (kaleido may be missing on cloud)
-        try:
-            buf = io.BytesIO()
-            fig.write_image(buf, format="png", width=1200, height=600, scale=2)
-            buf.seek(0)
-            download_bytes(buf.getvalue(), "screen_vs_study.png", "image/png")
-        except Exception as e:
-            # fallback to HTML
-            st.warning("PNG export unavailable in this environment. Downloading interactive HTML instead.")
-            html_bytes = fig.to_html(full_html=False, include_plotlyjs='cdn').encode('utf-8')
-            download_bytes(html_bytes, "screen_vs_study.html", "text/html")
+# Histogram: sleep distribution
+fig3 = px.histogram(df, x="sleep_hours", nbins=20,
+                    title="Sleep Hours Distribution")
+st.plotly_chart(fig3, use_container_width=True)
 
-# ---------- Simulator ----------
-with tab3:
-    st.subheader("Simulator: Estimate effect of reducing screen time")
-    avg_screen = df_display['screen_time_hours'].mean()
-    reduce_pct = st.slider("Reduce social media by (%)", 0, 100, 20)
-    delta = avg_screen * (reduce_pct/100.0)
-    st.write(f"Average screen time: **{avg_screen:.2f} hrs/day**. Reducing by {reduce_pct}% = **{delta:.2f} hrs/day**.")
+# ----------------------------------------------------
+# NEW: Productivity vs Gender
+# ----------------------------------------------------
+if "gender" in df.columns:
+    st.subheader("👥 Productivity by Gender")
+    fig_g = px.box(df, x="gender", y="productivity_rating",
+                   title="Productivity Distribution by Gender")
+    st.plotly_chart(fig_g, use_container_width=True)
 
-    # Use slope from previous model when available
-    if 'slope' in locals():
-        predicted_change_hours = -slope * delta
-        st.write(f"Predicted mean study-hours change: **{predicted_change_hours:.2f} hours/day** (~**{predicted_change_hours*60:.0f} minutes/day**).")
-        # estimate GPA delta (illustrative)
-        gpa_change = (predicted_change_hours*60)/30 * 0.1
-        st.write(f"Estimated GPA change (illustrative): **{gpa_change:.2f}**")
-    else:
-        st.info("Run analysis with enough data to enable predictions.")
+# ----------------------------------------------------
+# NEW: Productivity vs Social Media Apps Used
+# ----------------------------------------------------
+if "social_apps" in df.columns:
+    st.subheader("📱 Productivity by Social Media Apps Used")
 
-    if st.button("Show before vs after distribution"):
-        df_sim = df_display.copy()
-        df_sim['sim_screen'] = df_sim['screen_time_hours'] * (1 - reduce_pct/100.0)
-        if 'intercept' in locals() and intercept is not None:
-            df_sim['sim_study'] = intercept + slope * df_sim['sim_screen']
-        else:
-            # fallback to linear approx using slope only
-            df_sim['sim_study'] = df_sim['study_hours_per_day'] + (-slope * (df_sim['screen_time_hours'] - df_sim['sim_screen']))
-        df_sim['sim_study'] = np.clip(df_sim['sim_study'], 0, 24)
-        fig_sim = go.Figure()
-        fig_sim.add_trace(go.Histogram(x=df_display['study_hours_per_day'], name='Before', opacity=0.7))
-        fig_sim.add_trace(go.Histogram(x=df_sim['sim_study'], name='After', opacity=0.7))
-        fig_sim.update_layout(barmode='overlay', title="Before vs After study-hours (simulated)")
-        st.plotly_chart(fig_sim, use_container_width=True)
-        csv_bytes = df_sim.to_csv(index=False).encode('utf-8')
-        download_bytes(csv_bytes, "simulated_dataset.csv", "text/csv")
+    df_expanded = df.copy()
+    df_expanded["app_list"] = df_expanded["social_apps"].str.split(",")
 
-# ---------- Add Entry (live) ----------
-with tab4:
-    st.subheader("Add a new survey entry (demo only)")
-    with st.form("entry_form", clear_on_submit=True):
-        a_age = st.number_input("Age", 14, 30, 17)
-        a_year = st.selectbox("Year", ["11th","12th"])
-        a_screen = st.number_input("Screen time (hrs/day)", 0.0, 24.0, 3.0, 0.25)
-        a_purpose = st.selectbox("Purpose", ["Entertainment","Study","Social","News","Other"])
-        a_study = st.number_input("Study hours/day", 0.0, 24.0, 3.5, 0.25)
-        a_gpa = st.number_input("GPA (1-10)", 1.0, 10.0, 6.0, 0.1)
-        a_sleep = st.number_input("Sleep hours", 0.0, 24.0, 7.0, 0.25)
-        a_apps = st.selectbox("Uses study apps", ["yes","no"])
-        a_focus = st.selectbox("Uses focus mode", ["yes","no"])
-        submitted = st.form_submit_button("Add entry")
-    if submitted:
-        new_row = {
-            'id': int(df['id'].max() + 1) if 'id' in df.columns else len(df)+1,
-            'age': int(a_age),
-            'year': a_year,
-            'screen_time_hours': float(a_screen),
-            'purpose': a_purpose,
-            'study_hours_per_day': float(a_study),
-            'gpa': float(a_gpa),
-            'sleep_hours': float(a_sleep),
-            'uses_study_apps': a_apps,
-            'uses_focus_mode': a_focus,
-            'expected_gain_minutes_if_reduce_1h': np.nan
-        }
-        df = add_row(df, new_row)
-        df_display = df.copy()
-        st.success("Added new entry (session-only). Charts and analysis update in this session.")
-        if show_table:
-            st.dataframe(df_display.tail(5))
+    df_exploded = df_expanded.explode("app_list")
+    df_exploded["app_list"] = df_exploded["app_list"].str.strip()
+
+    fig_apps = px.box(df_exploded,
+                      x="app_list",
+                      y="productivity_rating",
+                      title="Productivity vs Social Media Apps")
+    st.plotly_chart(fig_apps, use_container_width=True)
+
+# ----------------------------------------------------
+# NEW: Productivity vs Purpose of Usage
+# ----------------------------------------------------
+if "open_response" in df.columns:
+    st.subheader("🎯 Productivity by Purpose of Social Media Use")
+
+    fig_purpose = px.box(df, x="open_response", y="productivity_rating",
+                         title="How Purpose of Social Media Use Affects Productivity")
+    st.plotly_chart(fig_purpose, use_container_width=True)
+
+# ----------------------------------------------------
+# TEXT ANALYTICS
+# ----------------------------------------------------
+st.header("💬 Text Insights (Keyword Extraction + Sentiment)")
+
+if "open_response" in df.columns:
+    topk = st.slider("Select number of top keywords", 5, 30, 10)
+    keywords = extract_keywords_tfidf(df["open_response"], topk)
+
+    st.subheader("🔑 Top Keywords")
+    st.table(pd.DataFrame(keywords, columns=["keyword", "score"]))
+
+    # SENTIMENT
+    df["sentiment_score"] = df["open_response"].apply(lambda x: basic_sentiment_score(str(x)))
+
+    st.metric("Avg Sentiment Score", f"{df['sentiment_score'].mean():.2f}")
+
+    fig_sent = px.histogram(df, x="sentiment_score", nbins=20,
+                            title="Sentiment Score Distribution")
+    st.plotly_chart(fig_sent, use_container_width=True)
+
+else:
+    st.info("No open text column found for insights.")
+
+# ----------------------------------------------------
+# MODEL: LOAD OR TRAIN
+# ----------------------------------------------------
+st.header("🤖 Machine Learning Model")
+
+pipeline = None
+features = None
+
+if model_file is not None:
+    model_data = joblib.load(model_file)
+    pipeline = model_data["pipeline"]
+    features = model_data["features"]
+    st.success("Model loaded successfully!")
+
+# Train model directly from CSV
+if train_now:
+    from train_model import train_and_save_from_df
+    model_data = train_and_save_from_df(df, target_col="productivity_rating")
+    pipeline = model_data["pipeline"]
+    features = model_data["features"]
+    st.success("Model trained & saved as model.joblib!")
+
+# ----------------------------------------------------
+# PREDICTIONS
+# ----------------------------------------------------
+if pipeline is not None:
+    st.subheader("📈 Predictions on Uploaded Data")
+
+    X = df[features].fillna(df[features].median())
+    preds = pipeline.predict(X)
+
+    st.dataframe(pd.DataFrame({"Predicted Productivity": preds}).head(20))
+
+    st.metric("Average Predicted Productivity", f"{np.mean(preds):.2f}")
+
+    # WHAT-IF SIMULATION
+    st.subheader("🔮 What-if Simulation (Increase Study Hours)")
+
+    pct = st.slider("Increase study hours by:", 0, 200, 20)
+    X2 = X.copy()
+
+    if "study_hours" in X.columns:
+        X2["study_hours"] *= (1 + pct / 100)
+
+        if "screen_time_hours" in X2.columns:
+            X2["screen_per_study"] = X2["screen_time_hours"] / (X2["study_hours"] + 0.1)
+
+        new_preds = pipeline.predict(X2)
+
+        st.metric("New Predicted Avg Productivity", f"{np.mean(new_preds):.2f}")
+        st.metric("Change", f"{np.mean(new_preds) - np.mean(preds):.2f}")
+
+else:
+    st.info("Upload a model or train one to enable predictions.")
 
 st.markdown("---")
-st.caption("Built with Streamlit. Deploy on Streamlit Cloud for a shareable URL (no installs required).")
+st.caption("Dashboard created with ❤️ for academic research.")
