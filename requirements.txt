@@ -8,3 +8,4 @@ matplotlib
 statsmodels
 textblob
 streamlit-lottie
+requests
