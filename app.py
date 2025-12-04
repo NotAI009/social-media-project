@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import plotly.express as px
+import joblib
 import requests
-from streamlit_lottie import st_lottie
+import json
 
-from utils import (
-    preprocess_for_model,
-    extract_keywords_tfidf,
-    basic_sentiment_score,
-)
+from utils import preprocess_for_model, extract_keywords_tfidf, basic_sentiment_score
 
 # ─────────────────────────────
 # PAGE CONFIG
@@ -21,55 +17,50 @@ st.set_page_config(
     page_icon="📊",
 )
 
-
 # ─────────────────────────────
-# THEME TOGGLE (GLOBAL)
+# GLOBAL CSS (cards, hero, floating assistant)
 # ─────────────────────────────
-if "theme" not in st.session_state:
-    st.session_state["theme"] = "dark"
-
-with st.sidebar:
-    st.write("### Appearance")
-    use_dark = st.checkbox("Dark mode", value=st.session_state["theme"] == "dark")
-
-st.session_state["theme"] = "dark" if use_dark else "light"
-
-# switch plotly theme too
-px.defaults.template = "plotly_dark" if st.session_state["theme"] == "dark" else "plotly_white"
-
-# ─────────────────────────────
-# CSS FOR BOTH THEMES
-# ─────────────────────────────
-if st.session_state["theme"] == "dark":
-    bg_main = "#050816"
-    text_color = "#eaeaea"
-    card_bg = "#0b1120"
-    metric_bg = "#020617"
-else:
-    bg_main = "#f3f4f6"
-    text_color = "#020617"
-    card_bg = "#ffffff"
-    metric_bg = "#e5e7eb"
-
 st.markdown(
-    f"""
+    """
     <style>
-    .main {{
-        background-color: {bg_main};
-        color: {text_color};
-    }}
-    .block-container {{
+    .main {
+        background-color: #050816;
+        color: #eaeaea;
+    }
+    .block-container {
         padding-top: 1rem;
         padding-bottom: 3rem;
         padding-left: 3rem;
         padding-right: 3rem;
-    }}
-    @keyframes fadeInUp {{
-        from {{ opacity: 0; transform: translateY(12px); }}
-        to   {{ opacity: 1; transform: translateY(0); }}
-    }}
-    .hero-card {{
-        background: radial-gradient(circle at top left, #1d4ed8, {card_bg} 55%);
+    }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .section-card {
+        background: #0b1120;
+        padding: 1.25rem 1.5rem;
+        border-radius: 0.9rem;
+        border: 1px solid #1f2937;
+        margin-bottom: 1.5rem;
+        animation: fadeInUp 0.7s ease-out;
+        animation-fill-mode: both;
+    }
+    .section-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 0.6rem;
+    }
+    .metric-card {
+        background: #020617;
+        padding: 1rem 1.2rem;
+        border-radius: 0.9rem;
+        border: 1px solid #1f2937;
+        animation: fadeInUp 0.7s ease-out;
+        animation-fill-mode: both;
+    }
+    .hero-card {
+        background: radial-gradient(circle at top left, #1d4ed8, #020617 55%);
         padding: 2.5rem 3rem;
         border-radius: 1.5rem;
         border: 1px solid #1f2937;
@@ -77,105 +68,55 @@ st.markdown(
         margin-bottom: 2rem;
         animation: fadeInUp 0.8s ease-out;
         animation-fill-mode: both;
-    }}
-    .hero-title {{
+    }
+    .hero-title {
         font-size: 2.3rem;
         font-weight: 800;
         margin-bottom: 0.75rem;
-    }}
-    .hero-subtitle {{
+    }
+    .hero-subtitle {
         font-size: 1rem;
         opacity: 0.95;
         margin-bottom: 1.25rem;
-    }}
-    .hero-badge {{
+    }
+    .hero-badge {
         display: inline-block;
         padding: 0.25rem 0.75rem;
         border-radius: 999px;
-        background: rgba(15, 23, 42, 0.75);
+        background: rgba(15, 23, 42, 0.8);
         border: 1px solid rgba(148, 163, 184, 0.5);
         font-size: 0.8rem;
         margin-bottom: 0.75rem;
-    }}
-    .hero-list li {{
+    }
+    .hero-list li {
         margin-bottom: 0.25rem;
-    }}
+    }
 
-    .section-card {{
-        background: {card_bg};
-        padding: 1.25rem 1.5rem;
-        border-radius: 0.75rem;
-        border: 1px solid #1f2937;
-        margin-bottom: 1.5rem;
-        animation: fadeInUp 0.7s ease-out;
-        animation-fill-mode: both;
-    }}
-    .section-title {{
-        font-size: 1.2rem;
-        font-weight: 700;
-        margin-bottom: 0.25rem;
-    }}
-
-    .metric-grid {{
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 1rem;
-        margin-top: 0.75rem;
-    }}
-    .metric-card {{
-        background: {metric_bg};
-        padding: 0.9rem 1.1rem;
-        border-radius: 0.75rem;
-        border: 1px solid #1f2937;
-        animation: fadeInUp 0.7s ease-out;
-    }}
-    .metric-label {{
-        font-size: 0.85rem;
-        opacity: 0.8;
-        margin-bottom: 0.15rem;
-    }}
-    .metric-value {{
-        font-size: 1.3rem;
-        font-weight: 700;
-    }}
-
-    /* Floating chat button */
-    .chat-fab {{
+    /* Floating assistant (single expander at bottom-right) */
+    div[data-testid="stExpander"] {
         position: fixed;
-        bottom: 24px;
-        right: 24px;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        width: 330px;
+        max-width: 80vw;
         z-index: 9999;
-    }}
-    .chat-fab button {{
-        border-radius: 999px !important;
-        height: 3.2rem;
-        width: 3.2rem;
-        padding: 0 !important;
-        font-size: 1.4rem;
-    }}
-    .chat-panel {{
-        position: fixed;
-        bottom: 90px;
-        right: 24px;
-        width: 360px;
-        max-height: 65vh;
-        z-index: 9998;
-        background: {card_bg};
-        border-radius: 1rem;
-        border: 1px solid #1f2937;
-        box-shadow: 0 18px 45px rgba(0,0,0,0.45);
-        padding: 0.75rem 0.9rem 0.85rem 0.9rem;
-    }}
+        border-radius: 1rem !important;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.75);
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] > details > summary {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
     </style>
-""",
+    """,
     unsafe_allow_html=True,
 )
 
-
 # ─────────────────────────────
-# LOTTIE HELPERS
+# LOTTIE LOADER (hero)
 # ─────────────────────────────
-def load_lottie_url(url: str):
+def load_lottie(url: str):
     try:
         r = requests.get(url)
         if r.status_code == 200:
@@ -185,15 +126,12 @@ def load_lottie_url(url: str):
     return None
 
 
-hero_anim = load_lottie_url(
+lottie_hero = load_lottie(
     "https://assets2.lottiefiles.com/packages/lf20_touohxv0.json"
-)
-eda_anim = load_lottie_url(
-    "https://assets8.lottiefiles.com/packages/lf20_2hu7cdvy.json"
-)
+)  # analytics-type animation
 
 # ─────────────────────────────
-# TITLE
+# HEADER
 # ─────────────────────────────
 st.title("📊 Impact of Social Media Usage on Student Productivity")
 st.markdown(
@@ -204,23 +142,24 @@ to study how **screen time**, **study hours**, **sleep** and **social media habi
 )
 
 # ─────────────────────────────
-# SIDEBAR: upload + ML config
+# SIDEBAR: upload + model controls
 # ─────────────────────────────
 with st.sidebar:
     st.header("Upload & Setup")
     uploaded = st.file_uploader("Upload Google Forms CSV", type=["csv"])
 
+    st.markdown("---")
+    st.subheader("ML Model")
     model_file = st.file_uploader("Upload trained model (model.joblib)", type=["joblib"])
-
     train_now = st.button("Train Model From CSV")
-
-    target_col = "productivity_rating"
 
     st.markdown("---")
     st.caption("Dashboard developed for academic analysis — no external APIs used.")
 
+TARGET_COL = "productivity_rating"
+
 # ─────────────────────────────
-# LANDING SCREEN (no CSV yet)
+# LANDING VIEW (before CSV upload)
 # ─────────────────────────────
 if uploaded is None:
     col_left, col_right = st.columns([2, 1])
@@ -247,12 +186,26 @@ if uploaded is None:
             unsafe_allow_html=True,
         )
     with col_right:
-        if hero_anim is not None:
-            st_lottie(hero_anim, height=260, key="hero")
-    st.info(
-        "Upload the **Google Forms CSV** from the sidebar. Once the file is loaded, the full dashboard with tabs and charts will appear."
-    )
-    st.caption("Dashboard created with ❤️ for academic research.")
+        if lottie_hero is not None:
+            # use pure HTML / JS to render lottie (no extra package required)
+            st.components.v1.html(
+                f"""
+                <div id="lottie" style="height:260px;"></div>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.7.4/lottie.min.js"></script>
+                <script>
+                var animation = lottie.loadAnimation({{
+                    container: document.getElementById('lottie'),
+                    renderer: 'svg',
+                    loop: true,
+                    autoplay: true,
+                    animationData: {json.dumps(lottie_hero)}
+                }});
+                </script>
+                """,
+                height=280,
+            )
+        else:
+            st.info("Animation could not be loaded.")
     st.stop()
 
 # ─────────────────────────────
@@ -277,10 +230,9 @@ df = df.rename(columns=col_map)
 st.success("CSV Loaded Successfully ✓ Columns mapped!")
 
 # ─────────────────────────────
-# SIDEBAR FILTERS (for EDA + text)
+# SIDEBAR FILTERS (for EDA & text)
 # ─────────────────────────────
 st.sidebar.subheader("Filters (for EDA & text insights)")
-
 gender_filter = None
 purpose_filter = None
 
@@ -313,95 +265,52 @@ tab_overview, tab_eda, tab_text, tab_ml = st.tabs(
 
 # ========= OVERVIEW TAB =========
 with tab_overview:
-    # Hero inside overview + small lottie on right
-    colA, colB = st.columns([2, 1])
-    with colA:
+    # Snapshot
+    with st.container():
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown(
-            """
-            <div class="hero-card">
-                <div class="hero-title">Visualise. Analyse. Predict.</div>
-                <div class="hero-subtitle">
-                    Explore how social media usage, study habits and sleep influence students' self-reported productivity.
-                </div>
-                <ul class="hero-list">
-                    <li>📊 Clean survey snapshot</li>
-                    <li>📈 Summary statistics & correlations</li>
-                    <li>🤖 Model-based productivity predictions</li>
-                </ul>
-            </div>
-            """,
+            '<div class="section-title">Data Snapshot</div>', unsafe_allow_html=True
+        )
+        st.write(f"Total responses in file: **{len(df)}**")
+        st.write(f"Responses after filters: **{len(df_view)}**")
+        st.dataframe(df_view)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Summary metrics
+    with st.container():
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-title">Summary Metrics (Filtered)</div>',
             unsafe_allow_html=True,
         )
-    with colB:
-        if hero_anim is not None:
-            st_lottie(hero_anim, height=220, key="hero2")
-
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-title">Data Snapshot</div>', unsafe_allow_html=True
-    )
-    st.write(f"Total responses in file: **{len(df)}**")
-    st.write(f"Responses after filters: **{len(df_view)}**")
-    st.dataframe(df_view)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Clean metrics (no weird empty bars)
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-title">Summary Metrics (Filtered)</div>',
-        unsafe_allow_html=True,
-    )
-
-    avg_screen = df_view["screen_time_hours"].mean()
-    avg_study = df_view["study_hours"].mean()
-    avg_sleep = df_view["sleep_hours"].mean()
-    avg_prod = df_view["productivity_rating"].mean()
-
-    st.markdown(
-        f"""
-        <div class="metric-grid">
-            <div class="metric-card">
-                <div class="metric-label">Avg Screen Time</div>
-                <div class="metric-value">{avg_screen:.2f} hrs</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-label">Avg Study Hours</div>
-                <div class="metric-value">{avg_study:.2f} hrs</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-label">Avg Sleep</div>
-                <div class="metric-value">{avg_sleep:.2f} hrs</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-label">Avg Productivity</div>
-                <div class="metric-value">{avg_prod:.2f} / 10</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.caption("Avg Screen Time")
+            st.subheader(f"{df_view['screen_time_hours'].mean():.2f} hrs")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.caption("Avg Study Hours")
+            st.subheader(f"{df_view['study_hours'].mean():.2f} hrs")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with c3:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.caption("Avg Sleep")
+            st.subheader(f"{df_view['sleep_hours'].mean():.2f} hrs")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with c4:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.caption("Avg Productivity")
+            st.subheader(f"{df_view['productivity_rating'].mean():.2f} / 10")
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ========= EDA TAB =========
 with tab_eda:
-    top_eda = st.columns([4, 1])
-    with top_eda[0]:
-        st.markdown(
-            '<div class="section-title">Exploratory Data Analysis</div>',
-            unsafe_allow_html=True,
-        )
-    with top_eda[1]:
-        if eda_anim is not None:
-            st_lottie(eda_anim, height=120, key="eda")
-
-    # quick correlations
+    # Correlations
     try:
-        num_cols = [
-            "screen_time_hours",
-            "study_hours",
-            "sleep_hours",
-            "productivity_rating",
-        ]
+        num_cols = ["screen_time_hours", "study_hours", "sleep_hours", "productivity_rating"]
         corr = df_view[num_cols].corr()
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown(
@@ -410,23 +319,24 @@ with tab_eda:
         )
         st.write(
             "Study hours vs productivity:",
-            f"**{corr.loc['study_hours','productivity_rating']:.2f}**",
+            f"**{corr.loc['study_hours', 'productivity_rating']:.2f}**",
         )
         st.write(
             "Screen time vs productivity:",
-            f"**{corr.loc['screen_time_hours','productivity_rating']:.2f}**",
+            f"**{corr.loc['screen_time_hours', 'productivity_rating']:.2f}**",
         )
         st.markdown("</div>", unsafe_allow_html=True)
     except Exception:
         pass
 
+    # Scatter plots
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-title">Screen Time & Study vs Productivity</div>',
         unsafe_allow_html=True,
     )
-    colA, colB = st.columns(2)
-    with colA:
+    cA, cB = st.columns(2)
+    with cA:
         fig1 = px.scatter(
             df_view,
             x="screen_time_hours",
@@ -436,7 +346,7 @@ with tab_eda:
             title="Screen Time vs Productivity",
         )
         st.plotly_chart(fig1, use_container_width=True)
-    with colB:
+    with cB:
         fig2 = px.scatter(
             df_view,
             x="study_hours",
@@ -448,18 +358,22 @@ with tab_eda:
         st.plotly_chart(fig2, use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # Sleep & distributions
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-title">Sleep & Group Comparisons</div>',
         unsafe_allow_html=True,
     )
     fig3 = px.histogram(
-        df_view, x="sleep_hours", nbins=20, title="Sleep Hours Distribution"
+        df_view,
+        x="sleep_hours",
+        nbins=20,
+        title="Sleep Hours Distribution",
     )
     st.plotly_chart(fig3, use_container_width=True)
 
-    colC, colD = st.columns(2)
-    with colC:
+    cC, cD = st.columns(2)
+    with cC:
         if "gender" in df_view.columns:
             gender_counts = df_view["gender"].value_counts()
             fig_gender = px.pie(
@@ -468,15 +382,15 @@ with tab_eda:
                 title="Gender Distribution",
             )
             st.plotly_chart(fig_gender, use_container_width=True)
-    with colD:
+    with cD:
         if "open_response" in df_view.columns:
             purpose_counts = df_view["open_response"].value_counts()
-            fig_purpose_pie = px.pie(
+            fig_purpose = px.pie(
                 values=purpose_counts.values,
                 names=purpose_counts.index,
                 title="Purpose of Social Media Usage",
             )
-            st.plotly_chart(fig_purpose_pie, use_container_width=True)
+            st.plotly_chart(fig_purpose, use_container_width=True)
 
     if "social_apps" in df_view.columns:
         df_expanded = df_view.copy()
@@ -533,7 +447,7 @@ with tab_ml:
     if "model_data" not in st.session_state:
         st.session_state["model_data"] = None
 
-    # Load uploaded model
+    # load existing model
     if model_file is not None:
         try:
             model_data = joblib.load(model_file)
@@ -542,7 +456,7 @@ with tab_ml:
         except Exception as e:
             st.error(f"Error loading model: {e}")
 
-    # Train model from CSV
+    # train new model
     if train_now:
         with st.spinner("Training model on uploaded CSV..."):
             from sklearn.model_selection import train_test_split
@@ -556,7 +470,7 @@ with tab_ml:
                 classification_report,
             )
 
-            X, y, features = preprocess_for_model(df, target_col="productivity_rating")
+            X, y, features = preprocess_for_model(df, target_col=TARGET_COL)
 
             if pd.api.types.is_numeric_dtype(y):
                 problem_type = "regression"
@@ -568,7 +482,9 @@ with tab_ml:
 
             if problem_type == "regression":
                 model = RandomForestRegressor(n_estimators=200, random_state=42)
-                pipeline_local = Pipeline([("scaler", StandardScaler()), ("rf", model)])
+                pipeline_local = Pipeline(
+                    [("scaler", StandardScaler()), ("rf", model)]
+                )
                 X_train, X_test, y_train, y_test = train_test_split(
                     X, y, test_size=0.2, random_state=42
                 )
@@ -579,19 +495,18 @@ with tab_ml:
                 st.write(f"**RMSE:** {rmse:.3f}")
                 st.write(f"**R² Score:** {r2:.3f}")
             else:
-                y = y.astype(str)
-                model = RandomForestClassifier(
-                    n_estimators=200, random_state=42
+                model = RandomForestClassifier(n_estimators=200, random_state=42)
+                pipeline_local = Pipeline(
+                    [("scaler", StandardScaler()), ("rf", model)]
                 )
-                pipeline_local = Pipeline([("scaler", StandardScaler()), ("rf", model)])
-                from sklearn.model_selection import train_test_split as tts
-
                 try:
+                    from sklearn.model_selection import train_test_split as tts
+
                     X_train, X_test, y_train, y_test = tts(
                         X, y, test_size=0.2, random_state=42, stratify=y
                     )
                 except ValueError:
-                    X_train, X_test, y_train, y_test = tts(
+                    X_train, X_test, y_train, y_test = train_test_split(
                         X, y, test_size=0.2, random_state=42
                     )
                 pipeline_local.fit(X_train, y_train)
@@ -610,8 +525,8 @@ with tab_ml:
             joblib.dump(model_data, "model.joblib")
             st.success("Model trained and saved as model.joblib in the app environment.")
 
+    # predictions & what-if
     model_data = st.session_state.get("model_data", None)
-
     if model_data is not None:
         pipeline = model_data["pipeline"]
         features = model_data["features"]
@@ -638,19 +553,20 @@ with tab_ml:
             pct = st.slider("Increase study hours by:", 0, 200, 20)
             X2 = X.copy()
             if "study_hours" in X2.columns:
-                X2["study_hours"] *= 1 + pct / 100.0
-                if "screen_time_hours" in df_pred.columns and "screen_per_study" in X2.columns:
+                X2["study_hours"] *= 1 + pct / 100
+                if (
+                    "screen_time_hours" in df_pred.columns
+                    and "screen_per_study" in X2.columns
+                ):
                     X2["screen_per_study"] = df_pred["screen_time_hours"] / (
                         X2["study_hours"] + 0.1
                     )
                 new_preds = pipeline.predict(X2)
                 st.metric(
-                    "New Predicted Avg Productivity",
-                    f"{np.mean(new_preds):.2f}",
+                    "New Predicted Avg Productivity", f"{np.mean(new_preds):.2f}"
                 )
                 st.metric(
-                    "Change",
-                    f"{np.mean(new_preds) - np.mean(preds):.2f}",
+                    "Change", f"{np.mean(new_preds) - np.mean(preds):.2f}"
                 )
             else:
                 st.info("No `study_hours` column available for simulation.")
@@ -660,89 +576,63 @@ with tab_ml:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ─────────────────────────────
-# PROJECT ASSISTANT CHATBOT (FLOATING)
+# FLOATING PROJECT ASSISTANT (CHATBOT-STYLE, RULE-BASED)
 # ─────────────────────────────
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-if "show_chat" not in st.session_state:
-    st.session_state["show_chat"] = False
-if "chat_messages" not in st.session_state:
-    st.session_state["chat_messages"] = [
-        {
-            "role": "assistant",
-            "content": "Hello! I’m your project assistant. Ask me about the dashboard, charts, correlations, or model.",
-        }
-    ]
+with st.expander("💬 Project Assistant (Professional)", expanded=False):
+    st.write(
+        "Hello! I am your project assistant. Ask me anything about the dashboard, charts, correlations, or model."
+    )
 
-# Floating button
-st.markdown(
-    """
-    <div class="chat-fab">
-        <form action="#" method="post">
-            <button type="submit">💬</button>
-        </form>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
+    for role, msg in st.session_state.chat_history:
+        if role == "user":
+            st.markdown(f"**You:** {msg}")
+        else:
+            st.markdown(f"**Assistant:** {msg}")
 
-# Streamlit can't read the HTML form, so use a normal button in an empty container
-fab_col = st.empty()
-if fab_col.button(" ", key="open_chat_fab"):
-    st.session_state["show_chat"] = not st.session_state["show_chat"]
+    with st.form("assistant_form", clear_on_submit=True):
+        user_q = st.text_input("Ask a question about this dashboard:")
+        submitted = st.form_submit_button("Send")
 
-if st.session_state["show_chat"]:
-    with st.container():
-        st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
-        st.markdown("#### 🤖 Project Assistant", unsafe_allow_html=True)
+    if submitted and user_q.strip():
+        st.session_state.chat_history.append(("user", user_q.strip()))
 
-        for msg in st.session_state["chat_messages"]:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        # very simple, deterministic "AI-style" explanation
+        answer = (
+            "Great question. In this project, **histograms** are used to show how a single "
+            "variable (for example, sleep hours) is distributed across students. The x-axis "
+            "shows value ranges (bins) and the height of each bar shows how many students "
+            "fall into that range.\n\n"
+            "If you want, you can relate this to productivity by comparing the histogram of "
+            "sleep with the average productivity metric shown above."
+        )
 
-        user_prompt = st.chat_input("Ask the project assistant a question")
-        if user_prompt:
-            st.session_state["chat_messages"].append(
-                {"role": "user", "content": user_prompt}
+        # you could branch on keywords here to customise answers
+        q_lower = user_q.lower()
+        if "correlation" in q_lower or "relation" in q_lower:
+            answer = (
+                "Correlations on this dashboard tell you how strongly two numeric variables "
+                "move together. A value close to **+1** means they increase together, "
+                "close to **-1** means one increases while the other decreases. "
+                "We compute these between screen time, study hours, sleep and productivity "
+                "in the *EDA & Comparisons* tab."
             )
-
-            # Simple rule-based "pro" answers
-            lower = user_prompt.lower()
-            if "histogram" in lower:
-                answer = (
-                    "A histogram groups continuous values into bins and shows how many "
-                    "responses fall in each bin. In this dashboard we use it for **sleep hours** "
-                    "and **sentiment scores** to see their distribution."
-                )
-            elif "scatter" in lower or "correlation" in lower:
-                answer = (
-                    "Scatter plots show the relationship between two numeric variables. "
-                    "Here we plot **screen time vs productivity** and **study hours vs productivity**. "
-                    "Points going upward from left to right indicate a positive correlation."
-                )
-            elif "model" in lower or "prediction" in lower:
-                answer = (
-                    "The model is a **Random Forest** using features like screen time, study hours, "
-                    "sleep hours and the derived `screen_per_study`. It predicts the productivity "
-                    "rating and we evaluate it using R² (for regression) or accuracy (for classification)."
-                )
-            elif "sentiment" in lower or "keyword" in lower:
-                answer = (
-                    "Text insights are based on simple TF-IDF keyword extraction and a basic "
-                    "keyword sentiment score. This highlights common purposes for social media "
-                    "use and whether the language is more positive or negative."
-                )
-            else:
-                answer = (
-                    "I can help explain charts, correlations, the ML model, or how to interpret results. "
-                    "Try asking things like *“What does the sleep histogram show?”* or "
-                    "*“How do you calculate `screen_per_study`?”*"
-                )
-
-            st.session_state["chat_messages"].append(
-                {"role": "assistant", "content": answer}
+        elif "model" in q_lower or "ml" in q_lower:
+            answer = (
+                "The ML tab uses a **Random Forest** model. It learns from the numeric "
+                "features (screen time, study hours, sleep, screen-time per study hour) "
+                "to predict the productivity rating. After training, the dashboard shows "
+                "predictions for all students and a what-if simulation when study hours "
+                "are increased."
             )
+        elif "histogram" in q_lower:
+            # keep the default answer defined above
+            pass
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.session_state.chat_history.append(("assistant", answer))
+        st.markdown(f"**Assistant:** {answer}")
 
 # ─────────────────────────────
 # FOOTER
