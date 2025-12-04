@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────
-# GLOBAL CSS (cards, hero, floating assistant)
+# GLOBAL CSS (cards, hero, etc.)
 # ─────────────────────────────
 st.markdown(
     """
@@ -30,13 +30,15 @@ st.markdown(
     .block-container {
         padding-top: 1rem;
         padding-bottom: 3rem;
-        padding-left: 3rem;
-        padding-right: 3rem;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
     }
+
     @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(12px); }
         to   { opacity: 1; transform: translateY(0); }
     }
+
     .section-card {
         background: #0b1120;
         padding: 1.25rem 1.5rem;
@@ -51,14 +53,35 @@ st.markdown(
         font-weight: 700;
         margin-bottom: 0.6rem;
     }
+
+    /* Metric cards – animated glow + title/value inside */
+    @keyframes metricGlow {
+        0%   { box-shadow: 0 0 0px rgba(59,130,246,0.2); }
+        50%  { box-shadow: 0 0 20px rgba(59,130,246,0.55); }
+        100% { box-shadow: 0 0 0px rgba(59,130,246,0.2); }
+    }
     .metric-card {
-        background: #020617;
-        padding: 1rem 1.2rem;
+        background: radial-gradient(circle at top left,#020617,#020617 40%,#020617 100%);
+        padding: 0.9rem 1.2rem;
         border-radius: 0.9rem;
         border: 1px solid #1f2937;
-        animation: fadeInUp 0.7s ease-out;
-        animation-fill-mode: both;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        animation: fadeInUp 0.6s ease-out, metricGlow 3s ease-in-out infinite;
     }
+    .metric-title {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #9ca3af;
+    }
+    .metric-value {
+        font-size: 1.45rem;
+        font-weight: 700;
+        color: #f9fafb;
+    }
+
     .hero-card {
         background: radial-gradient(circle at top left, #1d4ed8, #020617 55%);
         padding: 2.5rem 3rem;
@@ -90,23 +113,6 @@ st.markdown(
     }
     .hero-list li {
         margin-bottom: 0.25rem;
-    }
-
-    /* Floating assistant (single expander at bottom-right) */
-    div[data-testid="stExpander"] {
-        position: fixed;
-        bottom: 1.5rem;
-        right: 1.5rem;
-        width: 330px;
-        max-width: 80vw;
-        z-index: 9999;
-        border-radius: 1rem !important;
-        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.75);
-        overflow: hidden;
-    }
-    div[data-testid="stExpander"] > details > summary {
-        font-weight: 600;
-        font-size: 0.95rem;
     }
     </style>
     """,
@@ -187,7 +193,6 @@ if uploaded is None:
         )
     with col_right:
         if lottie_hero is not None:
-            # use pure HTML / JS to render lottie (no extra package required)
             st.components.v1.html(
                 f"""
                 <div id="lottie" style="height:260px;"></div>
@@ -266,51 +271,81 @@ tab_overview, tab_eda, tab_text, tab_ml = st.tabs(
 # ========= OVERVIEW TAB =========
 with tab_overview:
     # Snapshot
-    with st.container():
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="section-title">Data Snapshot</div>', unsafe_allow_html=True
-        )
-        st.write(f"Total responses in file: **{len(df)}**")
-        st.write(f"Responses after filters: **{len(df_view)}**")
-        st.dataframe(df_view)
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Data Snapshot</div>', unsafe_allow_html=True
+    )
+    st.write(f"Total responses in file: **{len(df)}**")
+    st.write(f"Responses after filters: **{len(df_view)}**")
+    st.dataframe(df_view)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Summary metrics
-    with st.container():
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    # Summary metrics – using our HTML metric cards
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Summary Metrics (Filtered)</div>',
+        unsafe_allow_html=True,
+    )
+
+    avg_screen = df_view["screen_time_hours"].mean()
+    avg_study = df_view["study_hours"].mean()
+    avg_sleep = df_view["sleep_hours"].mean()
+    avg_prod = df_view["productivity_rating"].mean()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
         st.markdown(
-            '<div class="section-title">Summary Metrics (Filtered)</div>',
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">Avg Screen Time</div>
+                <div class="metric-value">{avg_screen:.2f} hrs</div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.caption("Avg Screen Time")
-            st.subheader(f"{df_view['screen_time_hours'].mean():.2f} hrs")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.caption("Avg Study Hours")
-            st.subheader(f"{df_view['study_hours'].mean():.2f} hrs")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.caption("Avg Sleep")
-            st.subheader(f"{df_view['sleep_hours'].mean():.2f} hrs")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c4:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.caption("Avg Productivity")
-            st.subheader(f"{df_view['productivity_rating'].mean():.2f} / 10")
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">Avg Study Hours</div>
+                <div class="metric-value">{avg_study:.2f} hrs</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">Avg Sleep</div>
+                <div class="metric-value">{avg_sleep:.2f} hrs</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c4:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">Avg Productivity</div>
+                <div class="metric-value">{avg_prod:.2f} / 10</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ========= EDA TAB =========
 with tab_eda:
     # Correlations
     try:
-        num_cols = ["screen_time_hours", "study_hours", "sleep_hours", "productivity_rating"]
+        num_cols = [
+            "screen_time_hours",
+            "study_hours",
+            "sleep_hours",
+            "productivity_rating",
+        ]
         corr = df_view[num_cols].corr()
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown(
@@ -576,14 +611,15 @@ with tab_ml:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ─────────────────────────────
-# FLOATING PROJECT ASSISTANT (CHATBOT-STYLE, RULE-BASED)
+# PROJECT ASSISTANT (EXPANDER CHATBOT)
 # ─────────────────────────────
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 with st.expander("💬 Project Assistant (Professional)", expanded=False):
     st.write(
-        "Hello! I am your project assistant. Ask me anything about the dashboard, charts, correlations, or model."
+        "Hello! I am your project assistant. Ask me anything about the dashboard, charts, "
+        "correlations, or model."
     )
 
     for role, msg in st.session_state.chat_history:
@@ -599,18 +635,17 @@ with st.expander("💬 Project Assistant (Professional)", expanded=False):
     if submitted and user_q.strip():
         st.session_state.chat_history.append(("user", user_q.strip()))
 
-        # very simple, deterministic "AI-style" explanation
+        q_lower = user_q.lower()
+        # default answer about histograms
         answer = (
             "Great question. In this project, **histograms** are used to show how a single "
             "variable (for example, sleep hours) is distributed across students. The x-axis "
             "shows value ranges (bins) and the height of each bar shows how many students "
             "fall into that range.\n\n"
-            "If you want, you can relate this to productivity by comparing the histogram of "
-            "sleep with the average productivity metric shown above."
+            "You can relate this to productivity by comparing the histogram of sleep "
+            "with the average productivity metric shown above."
         )
 
-        # you could branch on keywords here to customise answers
-        q_lower = user_q.lower()
         if "correlation" in q_lower or "relation" in q_lower:
             answer = (
                 "Correlations on this dashboard tell you how strongly two numeric variables "
@@ -619,17 +654,14 @@ with st.expander("💬 Project Assistant (Professional)", expanded=False):
                 "We compute these between screen time, study hours, sleep and productivity "
                 "in the *EDA & Comparisons* tab."
             )
-        elif "model" in q_lower or "ml" in q_lower:
+        elif "model" in q_lower or "ml" in q_lower or "prediction" in q_lower:
             answer = (
                 "The ML tab uses a **Random Forest** model. It learns from the numeric "
-                "features (screen time, study hours, sleep, screen-time per study hour) "
+                "features (screen time, study hours, sleep, and screen-time per study hour) "
                 "to predict the productivity rating. After training, the dashboard shows "
                 "predictions for all students and a what-if simulation when study hours "
                 "are increased."
             )
-        elif "histogram" in q_lower:
-            # keep the default answer defined above
-            pass
 
         st.session_state.chat_history.append(("assistant", answer))
         st.markdown(f"**Assistant:** {answer}")
