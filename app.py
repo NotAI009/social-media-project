@@ -276,7 +276,7 @@ with tab_overview:
         unsafe_allow_html=True,
     )
     st.write(f"Total responses in file: **{len(df)}**")
-    st.write(f"Responses after filters: **{len[df_view]}**")
+    st.write(f"Responses after filters: **{len(df_view)}**")
     st.dataframe(df_view)
     st.markdown("</div>", unsafe_allow_html=True)
 
