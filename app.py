@@ -62,7 +62,9 @@ if df is None:
 # PREVIEW
 # ---------------------------------------------
 st.subheader("📄 Data Preview")
-st.dataframe(df.head())
+st.write(f"Total responses: {len(df)}")
+st.dataframe(df)
+
 
 # ---------------------------------------------
 # SUMMARY BOXES
