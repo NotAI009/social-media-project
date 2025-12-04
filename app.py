@@ -164,57 +164,127 @@ else:
 # ----------------------------------------------------
 # MODEL: LOAD OR TRAIN
 # ----------------------------------------------------
+# ----------------------------------------------------
+# MODEL: LOAD OR TRAIN
+# ----------------------------------------------------
 st.header("🤖 Machine Learning Model")
 
 pipeline = None
 features = None
 
+# 1) If user uploads an already trained model.joblib
 if model_file is not None:
-    model_data = joblib.load(model_file)
-    pipeline = model_data["pipeline"]
-    features = model_data["features"]
-    st.success("Model loaded successfully!")
+    try:
+        model_data = joblib.load(model_file)
+        pipeline = model_data["pipeline"]
+        features = model_data["features"]
+        st.success("Model loaded successfully from uploaded file!")
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
 
-# Train model directly from CSV
+# 2) Train model directly from the currently loaded CSV
 if train_now:
-    from train_model import train_and_save_from_df
-    model_data = train_and_save_from_df(df, target_col="productivity_rating")
-    pipeline = model_data["pipeline"]
-    features = model_data["features"]
-    st.success("Model trained & saved as model.joblib!")
+    with st.spinner("Training model on uploaded CSV..."):
+        # Import here so app still loads even if sklearn missing
+        from sklearn.model_selection import train_test_split
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, classification_report
+
+        # Use same pre-processing as everywhere
+        X, y, features = preprocess_for_model(df, target_col="productivity_rating")
+
+        # Auto-detect problem type: regression vs classification
+        if pd.api.types.is_numeric_dtype(y) and y.nunique() > 5:
+            problem_type = "regression"
+        else:
+            problem_type = "classification"
+
+        st.write(f"Detected problem type: **{problem_type}**")
+        st.write("Features used:", features)
+
+        if problem_type == "regression":
+            model = RandomForestRegressor(n_estimators=200, random_state=42)
+            pipeline_local = Pipeline([("scaler", StandardScaler()), ("rf", model)])
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+
+            pipeline_local.fit(X_train, y_train)
+            preds = pipeline_local.predict(X_test)
+
+            rmse = np.sqrt(mean_squared_error(y_test, preds))
+            r2 = r2_score(y_test, preds)
+            st.write(f"**RMSE:** {rmse:.3f}")
+            st.write(f"**R² Score:** {r2:.3f}")
+
+        else:  # classification
+            y = y.astype(str)
+            model = RandomForestClassifier(n_estimators=200, random_state=42)
+            pipeline_local = Pipeline([("scaler", StandardScaler()), ("rf", model)])
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+
+            pipeline_local.fit(X_train, y_train)
+            preds = pipeline_local.predict(X_test)
+
+            from sklearn.metrics import accuracy_score
+
+            acc = accuracy_score(y_test, preds)
+            st.write(f"**Accuracy:** {acc:.3f}")
+            st.text("Classification report:")
+            st.text(classification_report(y_test, preds))
+
+        # Save and expose model
+        joblib.dump(
+            {"pipeline": pipeline_local, "features": features, "problem_type": problem_type},
+            "model.joblib",
+        )
+        st.success("Model trained and saved as model.joblib in the app environment.")
+
+        pipeline = pipeline_local
 
 # ----------------------------------------------------
 # PREDICTIONS
 # ----------------------------------------------------
-if pipeline is not None:
+if pipeline is not None and features is not None:
     st.subheader("📈 Predictions on Uploaded Data")
 
-    X = df[features].fillna(df[features].median())
-    preds = pipeline.predict(X)
+    # Make sure required features exist
+    missing = [f for f in features if f not in df.columns]
+    if missing:
+        st.error(f"Missing required feature columns in data: {missing}")
+    else:
+        X = df[features].fillna(df[features].median())
+        preds = pipeline.predict(X)
 
-    st.dataframe(pd.DataFrame({"Predicted Productivity": preds}).head(20))
+        st.dataframe(pd.DataFrame({"Predicted Productivity": preds}).head(20))
+        st.metric("Average Predicted Productivity", f"{np.mean(preds):.2f}")
 
-    st.metric("Average Predicted Productivity", f"{np.mean(preds):.2f}")
+        # WHAT-IF SIMULATION
+        st.subheader("🔮 What-if Simulation (Increase Study Hours)")
+        pct = st.slider("Increase study hours by:", 0, 200, 20)
+        X2 = X.copy()
 
-    # WHAT-IF SIMULATION
-    st.subheader("🔮 What-if Simulation (Increase Study Hours)")
+        if "study_hours" in X.columns:
+            X2["study_hours"] *= (1 + pct / 100)
 
-    pct = st.slider("Increase study hours by:", 0, 200, 20)
-    X2 = X.copy()
+            if "screen_time_hours" in X2.columns:
+                X2["screen_per_study"] = X2["screen_time_hours"] / (X2["study_hours"] + 0.1)
 
-    if "study_hours" in X.columns:
-        X2["study_hours"] *= (1 + pct / 100)
+            new_preds = pipeline.predict(X2)
 
-        if "screen_time_hours" in X2.columns:
-            X2["screen_per_study"] = X2["screen_time_hours"] / (X2["study_hours"] + 0.1)
-
-        new_preds = pipeline.predict(X2)
-
-        st.metric("New Predicted Avg Productivity", f"{np.mean(new_preds):.2f}")
-        st.metric("Change", f"{np.mean(new_preds) - np.mean(preds):.2f}")
-
+            st.metric("New Predicted Avg Productivity", f"{np.mean(new_preds):.2f}")
+            st.metric("Change", f"{np.mean(new_preds) - np.mean(preds):.2f}")
+        else:
+            st.info("No `study_hours` column available for simulation.")
 else:
-    st.info("Upload a model or train one to enable predictions.")
+    st.info("Upload a model or click **Train Model From CSV** to enable predictions.")
+
 
 st.markdown("---")
 st.caption("Dashboard created with ❤️ for academic research.")
