@@ -29,4 +29,3 @@ def preprocess_for_model(df, target_col):
     X = df[cols].fillna(df[cols].median())
     y = df[target_col]
     return X, y, cols
-st.caption("Dashboard created with ❤️ for academic research.")
