@@ -610,7 +610,7 @@ with tab_ml:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-with st.expander("💬 Project Assistant (Professional)", expanded=False):
+with st.expander("💬 Project Assistant ", expanded=False):
     st.write(
         "Hello! I am your project assistant. Ask me anything about the dashboard, charts, "
         "correlations, or model."
