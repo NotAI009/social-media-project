@@ -212,17 +212,20 @@ else:
 # ─────────────────────────────
 # MODEL: LOAD OR TRAIN (uses full df, not filtered)
 # ─────────────────────────────
+# ----------------------------------------------------
+# MODEL: LOAD OR TRAIN (uses full df, not filtered)
+# ----------------------------------------------------
 st.header("🤖 Machine Learning Model")
 
-pipeline = None
-features = None
+# 🔹 Persist model across reruns
+if "model_data" not in st.session_state:
+    st.session_state["model_data"] = None
 
 # 1) If user uploads an already trained model.joblib
 if model_file is not None:
     try:
         model_data = joblib.load(model_file)
-        pipeline = model_data["pipeline"]
-        features = model_data["features"]
+        st.session_state["model_data"] = model_data
         st.success("Model loaded successfully from uploaded file!")
     except Exception as e:
         st.error(f"Error loading model: {e}")
@@ -287,19 +290,27 @@ if train_now:
             st.text("Classification report:")
             st.text(classification_report(y_test, preds))
 
-        # Save and expose model
-        joblib.dump(
-            {"pipeline": pipeline_local, "features": features, "problem_type": problem_type},
-            "model.joblib",
-        )
+        # Save model data in session_state so it survives reruns
+        model_data = {
+            "pipeline": pipeline_local,
+            "features": features,
+            "problem_type": problem_type,
+        }
+        st.session_state["model_data"] = model_data
+
+        # (Optional) also save to disk
+        joblib.dump(model_data, "model.joblib")
         st.success("Model trained and saved as model.joblib in the app environment.")
 
-        pipeline = pipeline_local
+# ----------------------------------------------------
+# PREDICTIONS (use model from session_state)
+# ----------------------------------------------------
+model_data = st.session_state.get("model_data", None)
 
-# ─────────────────────────────
-# PREDICTIONS
-# ─────────────────────────────
-if pipeline is not None and features is not None:
+if model_data is not None:
+    pipeline = model_data["pipeline"]
+    features = model_data["features"]
+
     st.subheader("📈 Predictions on Uploaded Data")
 
     # Recreate derived feature so 'screen_per_study' exists if model expects it
