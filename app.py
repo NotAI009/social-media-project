@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────
-# GLOBAL CSS (cards, hero, etc.)
+# GLOBAL CSS
 # ─────────────────────────────
 st.markdown(
     """
@@ -54,7 +54,7 @@ st.markdown(
         margin-bottom: 0.6rem;
     }
 
-    /* Metric cards – animated glow + title/value inside */
+    /* Metric cards – animated glow */
     @keyframes metricGlow {
         0%   { box-shadow: 0 0 0px rgba(59,130,246,0.2); }
         50%  { box-shadow: 0 0 20px rgba(59,130,246,0.55); }
@@ -134,7 +134,7 @@ def load_lottie(url: str):
 
 lottie_hero = load_lottie(
     "https://assets2.lottiefiles.com/packages/lf20_touohxv0.json"
-)  # analytics-type animation
+)
 
 # ─────────────────────────────
 # HEADER
@@ -148,7 +148,7 @@ to study how **screen time**, **study hours**, **sleep** and **social media habi
 )
 
 # ─────────────────────────────
-# SIDEBAR: upload + model controls
+# SIDEBAR
 # ─────────────────────────────
 with st.sidebar:
     st.header("Upload & Setup")
@@ -165,7 +165,7 @@ with st.sidebar:
 TARGET_COL = "productivity_rating"
 
 # ─────────────────────────────
-# LANDING VIEW (before CSV upload)
+# LANDING VIEW
 # ─────────────────────────────
 if uploaded is None:
     col_left, col_right = st.columns([2, 1])
@@ -235,7 +235,7 @@ df = df.rename(columns=col_map)
 st.success("CSV Loaded Successfully ✓ Columns mapped!")
 
 # ─────────────────────────────
-# SIDEBAR FILTERS (for EDA & text)
+# SIDEBAR FILTERS
 # ─────────────────────────────
 st.sidebar.subheader("Filters (for EDA & text insights)")
 gender_filter = None
@@ -271,19 +271,18 @@ tab_overview, tab_eda, tab_text, tab_ml = st.tabs(
 # ========= OVERVIEW TAB =========
 with tab_overview:
     # Snapshot
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">Data Snapshot</div>', unsafe_allow_html=True
+        '<div class="section-card"><div class="section-title">Data Snapshot</div>',
+        unsafe_allow_html=True,
     )
     st.write(f"Total responses in file: **{len(df)}**")
-    st.write(f"Responses after filters: **{len(df_view)}**")
+    st.write(f"Responses after filters: **{len[df_view]}**")
     st.dataframe(df_view)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Summary metrics – using our HTML metric cards
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    # Summary metrics
     st.markdown(
-        '<div class="section-title">Summary Metrics (Filtered)</div>',
+        '<div class="section-card"><div class="section-title">Summary Metrics (Filtered)</div>',
         unsafe_allow_html=True,
     )
 
@@ -347,9 +346,8 @@ with tab_eda:
             "productivity_rating",
         ]
         corr = df_view[num_cols].corr()
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown(
-            '<div class="section-title">Quick Correlations</div>',
+            '<div class="section-card"><div class="section-title">Quick Correlations</div>',
             unsafe_allow_html=True,
         )
         st.write(
@@ -365,9 +363,8 @@ with tab_eda:
         pass
 
     # Scatter plots
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">Screen Time & Study vs Productivity</div>',
+        '<div class="section-card"><div class="section-title">Screen Time & Study vs Productivity</div>',
         unsafe_allow_html=True,
     )
     cA, cB = st.columns(2)
@@ -394,9 +391,8 @@ with tab_eda:
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Sleep & distributions
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">Sleep & Group Comparisons</div>',
+        '<div class="section-card"><div class="section-title">Sleep & Group Comparisons</div>',
         unsafe_allow_html=True,
     )
     fig3 = px.histogram(
@@ -444,9 +440,8 @@ with tab_eda:
 
 # ========= TEXT TAB =========
 with tab_text:
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">Keyword & Sentiment Analysis</div>',
+        '<div class="section-card"><div class="section-title">Keyword & Sentiment Analysis</div>',
         unsafe_allow_html=True,
     )
     if "open_response" in df_view.columns:
@@ -473,9 +468,8 @@ with tab_text:
 
 # ========= ML TAB =========
 with tab_ml:
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">Model Training & Predictions</div>',
+        '<div class="section-card"><div class="section-title">Model Training & Predictions</div>',
         unsafe_allow_html=True,
     )
 
@@ -611,7 +605,7 @@ with tab_ml:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ─────────────────────────────
-# PROJECT ASSISTANT (EXPANDER CHATBOT)
+# PROJECT ASSISTANT
 # ─────────────────────────────
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -636,7 +630,7 @@ with st.expander("💬 Project Assistant (Professional)", expanded=False):
         st.session_state.chat_history.append(("user", user_q.strip()))
 
         q_lower = user_q.lower()
-        # default answer about histograms
+        # default answer
         answer = (
             "Great question. In this project, **histograms** are used to show how a single "
             "variable (for example, sleep hours) is distributed across students. The x-axis "
