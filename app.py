@@ -7,7 +7,9 @@ from utils import preprocess_for_model, extract_keywords_tfidf, basic_sentiment_
 
 st.set_page_config(page_title="Student Productivity Analysis Dashboard", layout="wide")
 
+# ─────────────────────────────
 # Custom CSS for nicer styling
+# ─────────────────────────────
 st.markdown("""
     <style>
     .main {
@@ -38,10 +40,38 @@ st.markdown("""
         font-weight: 700;
         margin-bottom: 0.25rem;
     }
+    .hero-card {
+        background: radial-gradient(circle at top left, #1d4ed8, #0b1120 55%);
+        padding: 2.5rem 3rem;
+        border-radius: 1.5rem;
+        border: 1px solid #1f2937;
+        color: #e5e7eb;
+        margin-bottom: 2rem;
+    }
+    .hero-title {
+        font-size: 2.3rem;
+        font-weight: 800;
+        margin-bottom: 0.75rem;
+    }
+    .hero-subtitle {
+        font-size: 1rem;
+        opacity: 0.9;
+        margin-bottom: 1.25rem;
+    }
+    .hero-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        font-size: 0.8rem;
+        margin-bottom: 0.75rem;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📊 Impact of Social Media Usage on Student Productivity")
+
 st.markdown("""
 This dashboard analyzes real student survey data and uses Machine Learning to explore  
 how **screen time**, **study hours**, **sleep**, and **social media habits** affect **productivity**.
@@ -64,34 +94,52 @@ with st.sidebar:
     st.caption("Dashboard developed for academic analysis — no external APIs used.")
 
 # ─────────────────────────────
-# LOAD CSV
+# LANDING SCREEN (before CSV upload)
 # ─────────────────────────────
-df = None
-if uploaded is not None:
-    df = pd.read_csv(uploaded)
-
-    # Strip extra spaces in column names
-    df.columns = df.columns.str.strip()
-
-    # MAP YOUR REAL CSV COLUMNS → CLEAN NAMES
-    col_map = {
-        "4. Average daily social media screen time (in hours)": "screen_time_hours",
-        "5. Average daily study hours (in hours)": "study_hours",
-        "6. Average daily sleep hours": "sleep_hours",
-        "10. Productivity Rating (1–10)": "productivity_rating",
-        "8. Purpose of social media usage": "open_response",
-        "7. Top social media apps you use": "social_apps",
-        "3. Gender": "gender",
-        "2. Age": "age",
-        "1. NAME": "name",
-    }
-    df = df.rename(columns=col_map)
-
-    st.success("CSV Loaded Successfully ✓ Columns mapped!")
-
-if df is None:
-    st.info("Please upload your real CSV file to continue.")
+if uploaded is None:
+    st.markdown(
+        """
+        <div class="hero-card">
+            <div class="hero-badge">Step 1 · Upload your Google Forms CSV from the sidebar</div>
+            <div class="hero-title">Visualise. Analyse. Predict.</div>
+            <div class="hero-subtitle">
+                This interactive dashboard helps you understand how your classmates' social media usage
+                relates to their study time, sleep, and productivity.  
+                Upload the CSV on the left to unlock EDA charts, text insights, and a machine learning model
+                that can simulate what happens when study hours change.
+            </div>
+            <ul>
+                <li>📈 Automatic graphs for screen time, study time, and productivity</li>
+                <li>💬 Keyword & sentiment analysis of open responses</li>
+                <li>🤖 ML model to predict productivity + <b>what-if simulations</b></li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.info("Use the **Upload Google Forms CSV** box on the left. Once uploaded, the full dashboard will appear.")
     st.stop()
+
+# ─────────────────────────────
+# LOAD & CLEAN CSV
+# ─────────────────────────────
+df = pd.read_csv(uploaded)
+df.columns = df.columns.str.strip()
+
+col_map = {
+    "4. Average daily social media screen time (in hours)": "screen_time_hours",
+    "5. Average daily study hours (in hours)": "study_hours",
+    "6. Average daily sleep hours": "sleep_hours",
+    "10. Productivity Rating (1–10)": "productivity_rating",
+    "8. Purpose of social media usage": "open_response",
+    "7. Top social media apps you use": "social_apps",
+    "3. Gender": "gender",
+    "2. Age": "age",
+    "1. NAME": "name",
+}
+df = df.rename(columns=col_map)
+
+st.success("CSV Loaded Successfully ✓ Columns mapped!")
 
 # ─────────────────────────────
 # SIDEBAR FILTERS (for EDA only)
@@ -161,6 +209,22 @@ with tab_overview:
 
 # ========= EDA TAB =========
 with tab_eda:
+    # numeric correlations
+    num_cols = ["screen_time_hours", "study_hours", "sleep_hours", "productivity_rating"]
+    corr_msg = ""
+    try:
+        corr = df_view[num_cols].corr()
+        if not corr.empty:
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Quick Correlations</div>', unsafe_allow_html=True)
+            st.write("Correlation between study hours and productivity:",
+                     f"**{corr.loc['study_hours','productivity_rating']:.2f}**")
+            st.write("Correlation between screen time and productivity:",
+                     f"**{corr.loc['screen_time_hours','productivity_rating']:.2f}**")
+            st.markdown('</div>', unsafe_allow_html=True)
+    except Exception:
+        pass
+
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Screen Time & Study vs Productivity</div>', unsafe_allow_html=True)
     colA, colB = st.columns(2)
@@ -169,6 +233,8 @@ with tab_eda:
             df_view,
             x="screen_time_hours",
             y="productivity_rating",
+            trendline="ols",
+            trendline_color_override="red",
             title="Screen Time vs Productivity"
         )
         st.plotly_chart(fig1, use_container_width=True)
@@ -177,6 +243,8 @@ with tab_eda:
             df_view,
             x="study_hours",
             y="productivity_rating",
+            trendline="ols",
+            trendline_color_override="red",
             title="Study Hours vs Productivity"
         )
         st.plotly_chart(fig2, use_container_width=True)
@@ -192,36 +260,40 @@ with tab_eda:
     )
     st.plotly_chart(fig3, use_container_width=True)
 
-    if "gender" in df_view.columns:
-        fig_g = px.box(
-            df_view,
-            x="gender",
-            y="productivity_rating",
-            title="Productivity by Gender"
-        )
-        st.plotly_chart(fig_g, use_container_width=True)
+    # Pie charts for distributions
+    colC, colD = st.columns(2)
+    with colC:
+        if "gender" in df_view.columns:
+            gender_counts = df_view["gender"].value_counts()
+            fig_gender = px.pie(
+                values=gender_counts.values,
+                names=gender_counts.index,
+                title="Gender Distribution"
+            )
+            st.plotly_chart(fig_gender, use_container_width=True)
+    with colD:
+        if "open_response" in df_view.columns:
+            purpose_counts = df_view["open_response"].value_counts()
+            fig_purpose_pie = px.pie(
+                values=purpose_counts.values,
+                names=purpose_counts.index,
+                title="Purpose of Social Media Usage"
+            )
+            st.plotly_chart(fig_purpose_pie, use_container_width=True)
 
     if "social_apps" in df_view.columns:
         df_expanded = df_view.copy()
         df_expanded["app_list"] = df_expanded["social_apps"].str.split(",")
         df_exploded = df_expanded.explode("app_list")
         df_exploded["app_list"] = df_exploded["app_list"].str.strip()
-        fig_apps = px.box(
-            df_exploded,
-            x="app_list",
-            y="productivity_rating",
-            title="Productivity vs Social Media Apps"
+        app_counts = df_exploded["app_list"].value_counts()
+        fig_apps = px.pie(
+            values=app_counts.values,
+            names=app_counts.index,
+            title="Most Used Social Media Apps"
         )
         st.plotly_chart(fig_apps, use_container_width=True)
 
-    if "open_response" in df_view.columns:
-        fig_purpose = px.box(
-            df_view,
-            x="open_response",
-            y="productivity_rating",
-            title="Productivity vs Purpose of Social Media Use"
-        )
-        st.plotly_chart(fig_purpose, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ========= TEXT TAB =========
