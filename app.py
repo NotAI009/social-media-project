@@ -134,8 +134,10 @@ DISPLAY_RENAME = {
     "name": "Name",
 }
 
+
 def pretty_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=DISPLAY_RENAME)
+
 
 # ─────────────────────────────
 # LOTTIE LOADER (hero)
@@ -160,8 +162,8 @@ lottie_hero = load_lottie(
 st.title("📊 Impact of Social Media Usage on Student Productivity")
 st.markdown(
     """
-This dashboard is based on a student survey and uses data analysis plus a Machine Learning model  
-to study how *screen time, **study hours, **sleep* and *social media habits* relate to *productivity*.
+ This dashboard is based on a student survey and uses data analysis plus a Machine Learning model 
+  to study how *screen time, **study hours, **sleep* and *social media habits* relate to *productivity*.
 """
 )
 
@@ -195,7 +197,7 @@ if uploaded is None:
                 <div class="hero-title">Visualise. Analyse. Predict.</div>
                 <div class="hero-subtitle">
                     This project investigates how students' social media usage is connected to their study time,
-                    sleep duration and self-reported productivity.  
+                    sleep duration and self-reported productivity. 
                     The dashboard provides a single place to explore the survey data and experiment with
                     a simple machine-learning model.
                 </div>
@@ -282,8 +284,8 @@ if purpose_filter:
 # ─────────────────────────────
 # TABS
 # ─────────────────────────────
-tab_overview, tab_eda, tab_text, tab_ml = st.tabs(
-    ["📋 Overview", "📊 EDA & Comparisons", "💬 Text Insights", "🤖 ML Model"]
+tab_overview, tab_eda, tab_text, tab_ml, tab_math = st.tabs(
+    ["📋 Overview", "📊 EDA & Comparisons", "💬 Text Insights", "🤖 ML Model", "📐 Math Insights"]
 )
 
 # ========= OVERVIEW TAB =========
@@ -632,6 +634,193 @@ with tab_ml:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ========= MATH TAB =========
+with tab_math:
+    st.markdown(
+        '<div class="section-card"><div class="section-title">Mathematical Insights (Vectors, Matrices, Calculus)</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write(
+        """
+This tab makes the **mathematics behind the project explicit** so you can explain it clearly:
+
+- We treat the data as **vectors** and build **matrices** from them.  
+- From those matrices, we compute a **covariance matrix** and its **eigenvalues / eigenvectors** (link to PCA).  
+- We use **vector algebra** (dot product and angle) to study how strongly two variables move together.  
+- We fit a straight line between study hours and productivity and use **differentiation** (slope)  
+  and **integration** (area under the curve) on that line.
+"""
+    )
+
+    num_cols_math = [
+        "screen_time_hours",
+        "study_hours",
+        "sleep_hours",
+        "productivity_rating",
+    ]
+    df_num = df_view[num_cols_math].dropna()
+
+    if df_num.shape[0] < 2:
+        st.info(
+            "Not enough rows after filters to compute matrix and calculus-based insights. "
+            "Remove some filters or add more data."
+        )
+    else:
+        # ---------- MATRIX & EIGENVALUES ----------
+        st.subheader("1️⃣ Matrix View & Covariance Matrix (Matrix Algebra)")
+
+        X_mat = df_num.to_numpy()  # each row = student vector, each column = feature
+        st.write("Feature matrix **X** (first 5 students):")
+        st.dataframe(
+            pd.DataFrame(X_mat[:5, :], columns=num_cols_math),
+            use_container_width=True,
+        )
+
+        # Covariance matrix of the features
+        cov_mat = np.cov(X_mat, rowvar=False)
+        cov_df = pd.DataFrame(cov_mat, index=num_cols_math, columns=num_cols_math)
+
+        st.write(
+            "We build the **4×4 covariance matrix Σ** of the numeric features, "
+            "where each entry Σᵢⱼ measures how two variables vary together:"
+        )
+        st.dataframe(cov_df, use_container_width=True)
+
+        # Eigenvalues / eigenvectors of covariance matrix
+        st.subheader("2️⃣ Eigenvalues & Eigenvectors (Vector Algebra + Matrices)")
+
+        try:
+            eig_vals, eig_vecs = np.linalg.eig(cov_mat)
+            # Sort eigenvalues (descending)
+            order = np.argsort(eig_vals)[::-1]
+            eig_vals = eig_vals[order]
+            eig_vecs = eig_vecs[:, order]
+
+            eig_info = pd.DataFrame(
+                {
+                    "Eigenvalue": eig_vals,
+                    "Variance Proportion": eig_vals / eig_vals.sum(),
+                }
+            )
+            st.write(
+                "Eigenvalues tell us how much variance each **principal direction** explains:"
+            )
+            st.table(eig_info)
+
+            principal_vec = eig_vecs[:, 0]
+            principal_df = pd.DataFrame(
+                {"Feature": num_cols_math, "Principal Component Weight": principal_vec}
+            )
+            st.write(
+                "The **first eigenvector** (principal component) is the direction of maximum variance "
+                "in the data. Its weights show how much each feature contributes:"
+            )
+            st.table(principal_df)
+        except np.linalg.LinAlgError:
+            st.warning("Could not compute eigenvalues for the covariance matrix.")
+
+        # ---------- VECTOR ALGEBRA ----------
+        st.subheader("3️⃣ Vector Algebra: Dot Product & Angle Between Variables")
+
+        v_screen = df_num["screen_time_hours"].to_numpy()
+        v_study = df_num["study_hours"].to_numpy()
+
+        dot_val = float(np.dot(v_screen, v_study))
+        norm_screen = float(np.linalg.norm(v_screen))
+        norm_study = float(np.linalg.norm(v_study))
+
+        if norm_screen > 0 and norm_study > 0:
+            cos_theta = dot_val / (norm_screen * norm_study)
+        else:
+            cos_theta = float("nan")
+
+        st.markdown(
+            r"""
+We treat the **screen-time column** and the **study-hours column** as two vectors  
+\(\vec{s}\) and \(\vec{h}\) in \(\mathbb{R}^n\) (where \(n\) is number of students).
+
+- **Dot product:** \(\vec{s} \cdot \vec{h} = \sum_i s_i h_i\)  
+- **Length (norm):** \(\|\vec{s}\| = \sqrt{\sum_i s_i^2}\)  
+- **Cosine of angle:** \(\cos \theta = \dfrac{\vec{s} \cdot \vec{h}}{\|\vec{s}\| \, \|\vec{h}\|}\)
+"""
+        )
+
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.metric("Dot product  s·h", f"{dot_val:.2f}")
+            st.metric("‖s‖ (screen-time vector length)", f"{norm_screen:.2f}")
+        with col_v2:
+            st.metric("‖h‖ (study-hours vector length)", f"{norm_study:.2f}")
+            if not np.isnan(cos_theta):
+                st.metric("cos(θ) between s and h", f"{cos_theta:.3f}")
+            else:
+                st.metric("cos(θ) between s and h", "NaN")
+
+        st.write(
+            "A cosine value closer to **+1** indicates that higher screen time and higher study hours "
+            "often occur together across students (they point in a similar direction in vector space)."
+        )
+
+        # ---------- CALCULUS: DIFFERENTIATION & INTEGRATION ----------
+        st.subheader("4️⃣ Calculus: Derivative (Slope) & Definite Integral from Trend Line")
+
+        if df_num["study_hours"].nunique() < 2:
+            st.info(
+                "Not enough distinct study-hour values to fit a line and apply calculus. "
+                "Add more data for this part."
+            )
+        else:
+            x = df_num["study_hours"].to_numpy()
+            y = df_num["productivity_rating"].to_numpy()
+
+            # Fit a straight line y = a x + b
+            a, b = np.polyfit(x, y, 1)
+
+            st.markdown(
+                rf"""
+We approximate the relationship between **study hours (x)** and **productivity (P)**  
+using a **linear function**:
+
+\[
+P(x) = a x + b \quad\text{with}\quad a = {a:.3f},\; b = {b:.3f}
+\]
+
+### 🔹 Differentiation (Rate of Change)
+The derivative of this line is constant:
+
+\[
+\frac{{dP}}{{dx}} = a = {a:.3f}
+\]
+
+This means: **for each extra hour of study, productivity changes by approximately {a:.3f} units** on average.
+"""
+            )
+
+            # Numerical integration over observed range
+            x_range = np.linspace(x.min(), x.max(), 200)
+            y_line = a * x_range + b
+            area = float(np.trapz(y_line, x_range))
+
+            st.markdown(
+                rf"""
+### 🔹 Integration (Area Under the Curve)
+
+We can also compute the **definite integral** of the fitted line between the minimum and maximum
+observed study hours:
+
+\[
+\int_{{x\_\min}}^{{x\_\max}} P(x)\,dx 
+\approx \text{{area under }} P(x)
+\approx {area:.2f}\, \text{{(productivity · hours)}}
+\]
+
+This represents the **total productivity mass** contributed over the whole range of study hours.
+"""
+            )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # ─────────────────────────────
 # PROJECT ASSISTANT
 # ─────────────────────────────
@@ -692,4 +881,4 @@ with st.expander("💬 Project Assistant", expanded=False):
 # FOOTER
 # ─────────────────────────────
 st.markdown("---")
-st.caption("Dashboard created with ❤ for academic research.")
+st.caption("Dashboard created with ❤ for academic research.")
