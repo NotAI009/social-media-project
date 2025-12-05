@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import joblib
 import requests
 import json
@@ -284,8 +285,15 @@ if purpose_filter:
 # ─────────────────────────────
 # TABS
 # ─────────────────────────────
-tab_overview, tab_eda, tab_text, tab_ml, tab_math = st.tabs(
-    ["📋 Overview", "📊 EDA & Comparisons", "💬 Text Insights", "🤖 ML Model", "📐 Math Insights"]
+tab_overview, tab_eda, tab_text, tab_ml, tab_math, tab_matrix = st.tabs(
+    [
+        "📋 Overview",
+        "📊 EDA & Comparisons",
+        "💬 Text Insights",
+        "🤖 ML Model",
+        "📐 Math Insights",
+        "🧮 Matrix Visuals",
+    ]
 )
 
 # ========= OVERVIEW TAB =========
@@ -777,7 +785,6 @@ We treat the **screen-time column** and the **study-hours column** as two vector
             # Fit a straight line y = a x + b
             a, b = np.polyfit(x, y, 1)
 
-            # Explanation without LaTeX braces in f-string
             st.markdown(
                 (
                     "We approximate the relationship between **study hours (x)** and "
@@ -805,6 +812,104 @@ We treat the **screen-time column** and the **study-hours column** as two vector
                     "contributed by all study-hour levels in the dataset."
                 )
             )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ========= MATRIX VISUALS TAB =========
+with tab_matrix:
+    st.markdown(
+        '<div class="section-card"><div class="section-title">Matrix demo — visualizing the feature matrix (3D) & covariance/correlation (heatmap)</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write(
+        """
+This tab connects your **Matrix** chapter directly to the data:
+
+- We pick a few numeric features and treat them as a **matrix X (samples × features)**.  
+- We plot the matrix values as a **3D scatter** (sample index, feature index, value).  
+- We also draw a **correlation heatmap** of the same features, which is derived from matrix operations.
+"""
+    )
+
+    numeric_cols_all = df_view.select_dtypes(include=[np.number]).columns.tolist()
+
+    if not numeric_cols_all:
+        st.info("No numeric columns available to build a feature matrix.")
+    else:
+        default_feats = numeric_cols_all[:3]
+
+        selected_feats = st.multiselect(
+            "Select numeric features to visualize as a matrix (3 or more recommended)",
+            options=numeric_cols_all,
+            default=default_feats,
+        )
+
+        max_rows = st.slider("Max rows (samples) to visualize", 5, 100, 12)
+
+        if len(selected_feats) < 2:
+            st.info("Select at least 2 numeric features to see the matrix and heatmap.")
+        else:
+            df_sel = df_view[selected_feats].dropna().head(max_rows)
+
+            if df_sel.empty:
+                st.info("No data available after filtering for the selected features.")
+            else:
+                X = df_sel.to_numpy()
+                n_samples, n_features = X.shape
+
+                # ---------- 3D MATRIX SCATTER ----------
+                st.subheader("1️⃣ 3D view of the feature matrix X")
+
+                sample_idx = np.arange(n_samples)
+                feat_idx = np.arange(n_features)
+                S, F = np.meshgrid(sample_idx, feat_idx, indexing="ij")
+
+                x_vals = S.flatten()          # sample index
+                y_vals = F.flatten()          # feature index
+                z_vals = X.flatten().astype(float)  # feature value
+
+                fig3d = go.Figure(
+                    data=[
+                        go.Scatter3d(
+                            x=x_vals,
+                            y=y_vals,
+                            z=z_vals,
+                            mode="markers",
+                            marker=dict(
+                                size=6,
+                                color=z_vals,
+                                colorscale="Viridis",
+                                showscale=True,
+                            ),
+                        )
+                    ]
+                )
+                fig3d.update_layout(
+                    scene=dict(
+                        xaxis_title="Sample index",
+                        yaxis_title="Feature index (position in X)",
+                        zaxis_title="Feature value",
+                    ),
+                    margin=dict(l=0, r=0, b=0, t=30),
+                )
+
+                st.plotly_chart(fig3d, use_container_width=True)
+
+                # ---------- CORRELATION HEATMAP ----------
+                st.subheader("2️⃣ Correlation matrix of selected features")
+
+                corr_mat = np.corrcoef(X, rowvar=False)
+                fig_corr = px.imshow(
+                    corr_mat,
+                    x=selected_feats,
+                    y=selected_feats,
+                    text_auto=".2f",
+                    aspect="auto",
+                    title="Correlation matrix",
+                    color_continuous_scale="Viridis",
+                )
+                st.plotly_chart(fig_corr, use_container_width=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
