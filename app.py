@@ -646,7 +646,7 @@ with tab_math:
 This tab makes the **mathematics behind the project explicit** so you can explain it clearly:
 
 - We treat the data as **vectors** and build **matrices** from them.  
-- From those matrices, we compute a **covariance matrix** and its **eigenvalues / eigenvectors** (link to PCA).  
+- From those matrices, we compute a **covariance matrix** and its **eigenvalues / eigenvectors** (linked to PCA).  
 - We use **vector algebra** (dot product and angle) to study how strongly two variables move together.  
 - We fit a straight line between study hours and productivity and use **differentiation** (slope)  
   and **integration** (area under the curve) on that line.
@@ -777,24 +777,16 @@ We treat the **screen-time column** and the **study-hours column** as two vector
             # Fit a straight line y = a x + b
             a, b = np.polyfit(x, y, 1)
 
+            # Explanation without LaTeX braces in f-string
             st.markdown(
-                rf"""
-We approximate the relationship between **study hours (x)** and **productivity (P)**  
-using a **linear function**:
-
-\[
-P(x) = a x + b \quad\text{with}\quad a = {a:.3f},\; b = {b:.3f}
-\]
-
-### 🔹 Differentiation (Rate of Change)
-The derivative of this line is constant:
-
-\[
-\frac{{dP}}{{dx}} = a = {a:.3f}
-\]
-
-This means: **for each extra hour of study, productivity changes by approximately {a:.3f} units** on average.
-"""
+                (
+                    "We approximate the relationship between **study hours (x)** and "
+                    "**productivity (P)** using a straight-line model:\n\n"
+                    f"**P(x) = a·x + b**, where **a = {a:.3f}** and **b = {b:.3f}**.\n\n"
+                    f"Here **a** is the derivative of P with respect to x (dP/dx). "
+                    f"That means for each extra hour of study, the predicted productivity "
+                    f"changes by approximately **{a:.3f} units**."
+                )
             )
 
             # Numerical integration over observed range
@@ -803,20 +795,15 @@ This means: **for each extra hour of study, productivity changes by approximatel
             area = float(np.trapz(y_line, x_range))
 
             st.markdown(
-                rf"""
-### 🔹 Integration (Area Under the Curve)
-
-We can also compute the **definite integral** of the fitted line between the minimum and maximum
-observed study hours:
-
-\[
-\int_{{x\_\min}}^{{x\_\max}} P(x)\,dx 
-\approx \text{{area under }} P(x)
-\approx {area:.2f}\, \text{{(productivity · hours)}}
-\]
-
-This represents the **total productivity mass** contributed over the whole range of study hours.
-"""
+                (
+                    "### 🔹 Integration (Area Under the Curve)\n\n"
+                    "Using the fitted line, we can also compute the **area under P(x)** "
+                    "between the minimum and maximum observed study hours. "
+                    "This is done using numerical integration (trapezoidal rule).\n\n"
+                    f"The approximate area over this range is **{area:.2f} "
+                    "productivity·hours**. This represents the total 'productivity mass' "
+                    "contributed by all study-hour levels in the dataset."
+                )
             )
 
     st.markdown("</div>", unsafe_allow_html=True)
